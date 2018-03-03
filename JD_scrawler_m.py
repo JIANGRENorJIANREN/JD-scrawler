@@ -4,6 +4,8 @@ import urllib.request
 from urllib import error
 import lxml.html
 import re
+import threading
+import time
 
 #download the html
 def jd_downloader(url, retries):
@@ -67,28 +69,61 @@ def get_links():
         links.append('https://search.jd.com/Search?keyword='+urllib.request.quote('手机')+'&enc=utf-8&page={0}&scrolling=y&show_items='.format(i+1))
     return links
 
+#
+def handle_scrawl(url1, url2):
+    global err
+    try:
+        err = 0
+
+        #download url1
+        h1 = jd_downloader(url1, 4)
+        p_list1, data_sku1 = jd_crawler(h1)
+        print('%s download completed'%(url1.split('&')[-1]))
+
+
+        data = ''
+        for i in range(len(data_sku1) - 1):
+            data += data_sku1[i] + ','
+        data += data_sku1[len(data_sku1) - 1]
+        url2 += url2 + data
+
+        #download url2
+        h2 = jd_downloader(url2, 4)
+        p_list2, data_sku2 = jd_crawler(h2)
+        print('%s download completed'%(url2.split('&')[-3]))
+
+        #for i in p_list1 + p_list2:
+        #    print(i.text_content())
+    except:
+        err += 1
+
 if __name__ == '__main__':
 
     links = get_links()
-    err = 0
-    while(links and err < 5):
-        url1 = links.pop()
-        url2 = links.pop()
-        #避免因ID不连续出现的爬取错误
-        try:
-            h1 = jd_downloader(url1, 4)
+    err = 0    #避免因ID不连续出现的爬取错误
+    threads = []
+    thread_max_nums = 10
 
-            p_list1, data_sku1 = jd_crawler(h1)
+    start = time.time()
 
-            data = ''
-            for i in range(len(data_sku1)-1):
-                data += data_sku1[i] + ','
-            data += data_sku1[len(data_sku1)-1]
-            url2 += url2+data
+    while threads or links:
+        for thread in threads:
+            if not thread.is_alive():
+                # remove the stopped threads
+                threads.remove(thread)
+        while len(threads) < thread_max_nums and links:
+            url1 = links.pop(0)
+            #i += 1
+            url2 = links.pop(0)
+            #i += 1
+            thread = threading.Thread(target=handle_scrawl, args=(url1, url2))
+            thread.setDaemon(True)
+            thread.start()
+            threads.append(thread)
 
-            h2 = jd_downloader(url2, 4)
-            p_list2, data_sku2 = jd_crawler(h2)
-            for i in p_list1+p_list2:
-                print(i.text_content())
-        except:
-            err += 1
+    end = time.time()
+    print('it costs %.2f seconds'%(end-start))
+
+
+
+
