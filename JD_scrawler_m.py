@@ -6,6 +6,8 @@ import lxml.html
 import re
 import threading
 import time
+from MongoDB import MongoQueue
+import multiprocessing
 
 #download the html
 def jd_downloader(url, retries):
@@ -96,30 +98,56 @@ def handle_scrawl(url1, url2):
         #    print(i.text_content())
     except:
         err += 1
+        if err > err_max:
+            raise
+
+
+def thread_link_crawler():
+    '''
+
+    :param thread_max_nums: 最多线程数量
+    :param err_max:ID不连续的情况出现的最多次数
+    :return:
+    '''
+    links = get_links()
+    threads = []
+    while threads or links:
+        for thread in threads:
+            if not thread.is_alive():
+                # remove the stopped threads
+                threads.remove(thread)
+        while len(threads) < 10 and links:   #设置最大线程数为10
+            url1 = links.pop(0)
+            url2 = links.pop(0)
+            thread = threading.Thread(target=handle_scrawl, args=(url1, url2))
+            thread.setDaemon(True)
+            thread.start()
+            threads.append(thread)
+
+#多进程爬取
+def process_link_crawler(args):
+    num_cpus = multiprocessing.cpu_count()
+    print('starting {} processes'.format(num_cpus))
+    processes = []
+    for i in range(num_cpus):
+        p = multiprocessing.Process(target=thread_link_crawler)
+        p.start()
+        processes.append(p)
+
+    #wait for processes to complete
+    for p in processes:
+        p.join()
+
 
 if __name__ == '__main__':
 
     links = get_links()
     err = 0    #避免因ID不连续出现的爬取错误
     threads = []
-    thread_max_nums = 10
 
     start = time.time()
 
-    while threads or links:
-        for thread in threads:
-            if not thread.is_alive():
-                # remove the stopped threads
-                threads.remove(thread)
-        while len(threads) < thread_max_nums and links:
-            url1 = links.pop(0)
-            #i += 1
-            url2 = links.pop(0)
-            #i += 1
-            thread = threading.Thread(target=handle_scrawl, args=(url1, url2))
-            thread.setDaemon(True)
-            thread.start()
-            threads.append(thread)
+    process_link_crawler(args=None)
 
     end = time.time()
     print('it costs %.2f seconds'%(end-start))
